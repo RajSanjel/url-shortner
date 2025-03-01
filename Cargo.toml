@@ -11,3 +11,5 @@ dotenv = "0.15"
 serde = { version = "1.0", features = ["derive"] }  # Only "derive" is needed for serde
 chrono = { version = "0.4", features = ["serde"] }  # Enable serde support in chrono
 uuid = { version = "1.0", features = ["v4", "serde"] }
+rand = "0.8.0"
+validator = { version = "0.20.0", features = ["derive"] }

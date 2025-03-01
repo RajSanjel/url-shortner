@@ -4,13 +4,16 @@ use axum::{
     http::StatusCode,
     Json as JsonResponse,
 };
+use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use validator::Validate; // Only need Validate
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Validate)]
 pub struct ShortenPayload {
-    url: String,
-    custom_id: String,
+    #[validate(url(message = "Not a valid URL"))]
+    url: Option<String>,
+    custom_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -18,16 +21,33 @@ pub struct ShortenResponse {
     short_url: String,
 }
 
+fn random_custom_id() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(7)
+        .map(char::from)
+        .collect()
+}
+
 pub async fn shorten_url(
     State(pool): State<PgPool>,
     Json(payload): Json<ShortenPayload>,
 ) -> Result<(StatusCode, JsonResponse<ShortenResponse>), (StatusCode, String)> {
+    // Validate the entire payload
+    payload
+        .validate()
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    // Safe to unwrap url because validation ensures it's Some and a valid URL
+    let url = payload.url.unwrap();
+    let custom_id = payload.custom_id.unwrap_or_else(random_custom_id);
+
     let short_url_row = sqlx::query_as::<_, ShortUrl>(
         "INSERT INTO short_url (url, custom_id) VALUES ($1, $2) RETURNING *",
     )
-    .bind(&payload.url)
-    .bind(&payload.custom_id)
-    .fetch_one(&pool) // Changed to .fetch_one()
+    .bind(&url)
+    .bind(&custom_id)
+    .fetch_one(&pool)
     .await
     .map_err(|e| {
         if let sqlx::Error::Database(db_err) = &e {
